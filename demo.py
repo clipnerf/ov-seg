@@ -17,6 +17,7 @@ from detectron2.utils.logger import setup_logger
 from open_vocab_seg import add_ovseg_config
 
 from open_vocab_seg.utils import VisualizationDemo
+import wandb
 
 # constants
 WINDOW_NAME = "Open vocabulary segmentation"
@@ -75,6 +76,9 @@ if __name__ == "__main__":
     logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
+
+    # wandb.init(project="Feature", 
+    # entity="3dv_connect_clip_nerf")
 
     demo = VisualizationDemo(cfg)
     class_names = args.class_names

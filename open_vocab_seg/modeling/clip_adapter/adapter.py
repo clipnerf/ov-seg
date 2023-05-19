@@ -28,6 +28,7 @@ class ClipAdapter(nn.Module):
         image = self._preprocess_image(image, **kwargs)
         text_feature = self.get_text_features(text)  # k,feat_dim
         image_features = self.get_image_features(image)
+        
         return self.get_sim_logits(text_feature, image_features)
 
     def _preprocess_image(self, image: torch.Tensor):
@@ -123,7 +124,14 @@ class MaskFormerClipAdapter(ClipAdapter):
         normalize: bool = True,
         fwd_w_region_mask: bool = False,
     ):
+        print('mask: ', mask.shape)
+        print('image: ', image.shape)
         (regions, unnorm_regions), region_masks, valid_flag = self._preprocess_image(image, mask, normalize=normalize)
+        print('len(regions)' ,len(regions))
+        print('regions' , regions.shape)
+        print('unnorm_regions' ,unnorm_regions.shape)
+        print('region_masks' ,region_masks.shape)
+        print(isinstance(regions, list))
         if regions is None:
             return None, valid_flag
         if isinstance(regions, list):
@@ -131,12 +139,17 @@ class MaskFormerClipAdapter(ClipAdapter):
             image_features = torch.cat(
                 [self.get_image_features(image_i) for image_i in regions], dim=0
             )
+            print(self.get_image_features(regions[0]).shape)
         else:
             if self.mask_prompt_fwd:
                 image_features = self.get_image_features(regions, region_masks)
+                print('image_features1: ', image_features.shape)
             else:
                 image_features = self.get_image_features(regions)
         text_feature = self.get_text_features(text)  # k,feat_dim
+        print('image_features: ', image_features.shape)
+        print('text_feature: ', text_feature.shape)
+        # print('valid_flag: ', valid_flag)
         return self.get_sim_logits(text_feature, image_features), unnorm_regions, valid_flag, image_features
 
     def get_image_features(self, image, region_masks=None):

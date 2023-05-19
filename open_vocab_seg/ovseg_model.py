@@ -25,6 +25,9 @@ from .modeling.clip_adapter import (
 )
 from .mask_former_model import MaskFormer
 from .utils.misc import get_gt_binary_masks
+import wandb
+from sklearn import decomposition
+from matplotlib import pyplot
 
 @META_ARCH_REGISTRY.register()
 class OVSeg(MaskFormer):
@@ -380,10 +383,18 @@ class OVSegDEMO(MaskFormer):
                         Each dict contains keys "id", "category_id", "isthing".
         """
         images = [x["image"].to(self.device) for x in batched_inputs]
+        # print('images len: ', len(images))
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.size_divisibility)
+        # print('images: ', images)
+        # print('images tensor: ', images.tensor.shape)
 
         features = self.backbone(images.tensor)
+        # print('features: ', features)
+        # print('features res2: ', features['res2'].shape)
+        # print('features res3: ', features['res3'].shape)
+        # print('features res4: ', features['res4'].shape)
+        # print('features res5: ', features['res5'].shape)
         outputs = self.sem_seg_head(features)
         class_names = batched_inputs[0]["class_names"]
         if len(class_names) == 1:
@@ -395,6 +406,8 @@ class OVSegDEMO(MaskFormer):
         )
         mask_cls_results = outputs["pred_logits"]
         mask_pred_results = outputs["pred_masks"]
+        # print('mask_cls_results: ', mask_cls_results.shape)
+        # print('mask_pred_results: ', mask_pred_results.shape)
         # upsample masks
         mask_pred_results = F.interpolate(
             mask_pred_results,
@@ -402,6 +415,7 @@ class OVSegDEMO(MaskFormer):
             mode="bilinear",
             align_corners=False,
         )
+        print('mask_pred_results: ', mask_pred_results.shape)
 
         processed_results = []
         for mask_cls_result, mask_pred_result, input_per_image, image_size in zip(
@@ -413,31 +427,42 @@ class OVSegDEMO(MaskFormer):
                 mask_pred_result, image_size, height, width
             )
             image = input_per_image["image"].to(self.device)
-
-            r, regions, sem_features = self.demo_inference(mask_cls_result, mask_pred_result, image, class_names)
+            print('mask_cls_result: ', mask_cls_result.shape)
+            # print('mask_cls_result: ', mask_cls_result[0])
+            # print('mask_pred_result: ', mask_pred_result.shape)
+            # print('mask_pred_result: ', mask_pred_result[0])
+            # print('mask_pred_result: ', mask_pred_result.sum(dim=0))
+            r, regions, semseg_feature = self.demo_inference(mask_cls_result, mask_pred_result, image, class_names)
 
             height = input_per_image.get("height", image_size[0])
             width = input_per_image.get("width", image_size[1])
             r = sem_seg_postprocess(r, image_size, height, width)
+            # print('r: ', r.shape)
             processed_results.append({"sem_seg": r})
+            semseg_feature = sem_seg_postprocess(semseg_feature, image_size, height, width)
 
-            sem_features = sem_seg_postprocess(sem_features, image_size, height, width)
-
-        return processed_results, sem_features
+        return processed_results, semseg_feature
 
 
 
 
     def demo_inference(self, mask_cls, mask_pred, image, class_names):
         mask_cls = F.softmax(mask_cls, dim=-1)[..., :-1]
+        print('mask_cls sf', mask_cls.shape)
         mask_pred = mask_pred.sigmoid()
         N, H, W = mask_pred.shape
+        print('mask_pred sig', mask_pred.shape)
 
+        print('self.clip_ensemble', self.clip_ensemble)
+        print('self.clip_ensemble_weight: ', self.clip_ensemble_weight)
         regions = None
         if self.clip_ensemble:
+            import pdb
+            pdb.set_trace()
             clip_cls, regions, valid_flag, image_features = self.clip_adapter(
                 image, class_names, mask_pred, normalize=True
             )
+            print('clip_cls: ', clip_cls.shape)
             if clip_cls is None:
                 clip_cls = torch.empty(0, mask_cls.shape[-1] + 1, device=self.device)
             # softmax before index or after?
@@ -450,13 +475,18 @@ class OVSegDEMO(MaskFormer):
 
             else:
                 # only clip model predictions are used
+                print('# only clip model predictions are used')
                 mask_cls = clip_cls
                 mask_pred = mask_pred[valid_flag]
-        C = image_features.shape[-1]
-        # mask_pred_argmax = torch.argmax(mask_pred, dim=0, keepdim=True)
+        # print('mask_pred sig', mask_pred[:, 0, 0])
+        # print('mask_pred sig', torch.argmax(mask_pred[:, 0, 0], dim=0))
+        # print('mask_pred sig', torch.argmax(mask_pred, dim=0).shape)
+        # print('mask_pred sig', torch.argmax(mask_pred, dim=0, keepdim=True))
+        # print('mask_pred sig', torch.argmax(mask_pred, dim=0, keepdim=True).shape)
+        C = image_features.shape[-1] # N, C
         mask_pred_argmax = torch.argmax(mask_pred, dim=0).unsqueeze(0)
         mask_pred_argmax = mask_pred_argmax.expand(C, H, W)
-        print('mask_pred_argmax: ', mask_pred_argmax.shape)
+        print('mask_pred_argmax: ', mask_pred_argmax.shape) # C, H, W
 
         bin_mask = mask_pred > self.clip_adapter.mask_thr
         select_cls = torch.zeros(sum(valid_flag), mask_cls.shape[-1], device=self.device)
@@ -465,15 +495,31 @@ class OVSegDEMO(MaskFormer):
             select_mask = select_mask[:-1]
         for idx in select_mask:
             select_cls[idx] = mask_cls[idx]
+        print('select_cls: ', select_cls.shape)
+        # print('select_cls: ', select_cls)
         semseg = torch.einsum("qc,qhw->chw", select_cls, bin_mask.float())
-
+        print('bin_mask: ', bin_mask.shape)
+        print('semseg: ', semseg.shape)
+        # print('semseg: ', semseg.sum(dim=0))
         # image_features_new = torch.zeros(C, H, W)
         # for i in range(H):
         #     for j in range(W):
         #         index = mask_pred_argmax[:, i, j]
         #         image_features_new[:, i, j] = image_features[index]
-        image_features_new = image_features.unsqueeze(-1).unsqueeze(-1).expand(-1, C, H, W)  # shape: (N, C, H, W)
+        # image_features_new = torch.einsum("qc,qhw->chw", image_features, bin_mask.float())
+        # print('semseg_feature', semseg_feature.shape)
+        image_features_new = image_features.unsqueeze(-1).unsqueeze(-1).expand(-1, C, H, W) #N, C, 1, 1
+        print('image_features_new', image_features_new.shape)
         image_features_new = torch.gather(image_features_new, 0, mask_pred_argmax.unsqueeze(0))
         image_features_new = image_features_new.squeeze(0)
-        print('image_features_new', image_features_new)
+        print('image_features_new', image_features_new.shape)
+        # image_features_new = image_features_new.permute(1, 2, 0)
+        # image_features_new = image_features_new.reshape(H*W, -1)
+        # image_features_new = image_features_new.cpu().numpy()
+        # pca = decomposition.PCA(n_components=3)
+        # transformed = pca.fit_transform(image_features_new)
+        # transformed = transformed.reshape(H, W, 3)
+        # plot = pyplot.imshow(transformed)
+        # wandb.log({"vis_features": wandb.Image(plot)})
+
         return semseg, regions, image_features_new

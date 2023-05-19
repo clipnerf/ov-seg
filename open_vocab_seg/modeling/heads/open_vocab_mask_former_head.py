@@ -125,6 +125,10 @@ class OpenVocabMaskFormerHead(nn.Module):
             mask_features,
             transformer_encoder_features,
         ) = self.pixel_decoder.forward_features(features)
+        print('self.transformer_in_feature', self.transformer_in_feature)
+        print('features[self.transformer_in_feature]', features[self.transformer_in_feature].shape)
+        print('mask_features', mask_features.shape)
+        print('transformer_encoder_features', transformer_encoder_features)
         if self.transformer_in_feature == "transformer_encoder":
             assert (
                 transformer_encoder_features is not None
@@ -134,6 +138,7 @@ class OpenVocabMaskFormerHead(nn.Module):
             predictions = self.predictor(
                 features[self.transformer_in_feature], mask_features
             )
+        # print('predictions: ', predictions)
         return predictions
 
     def freeze_pretrained(self):
