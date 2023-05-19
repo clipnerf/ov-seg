@@ -33,7 +33,8 @@ class OVSegPredictor(DefaultPredictor):
             image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
 
             inputs = {"image": image, "height": height, "width": width, "class_names": class_names}
-            predictions = self.model([inputs])[0]
+            predictions, _ = self.model([inputs])
+            predictions = predictions[0]
             return predictions
 
 class OVSegVisualizer(Visualizer):

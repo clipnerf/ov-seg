@@ -414,14 +414,16 @@ class OVSegDEMO(MaskFormer):
             )
             image = input_per_image["image"].to(self.device)
 
-            r, regions = self.demo_inference(mask_cls_result, mask_pred_result, image, class_names)
+            r, regions, sem_features = self.demo_inference(mask_cls_result, mask_pred_result, image, class_names)
 
             height = input_per_image.get("height", image_size[0])
             width = input_per_image.get("width", image_size[1])
             r = sem_seg_postprocess(r, image_size, height, width)
             processed_results.append({"sem_seg": r})
 
-        return processed_results
+            sem_features = sem_seg_postprocess(sem_features, image_size, height, width)
+
+        return processed_results, sem_features
 
 
 
@@ -429,10 +431,11 @@ class OVSegDEMO(MaskFormer):
     def demo_inference(self, mask_cls, mask_pred, image, class_names):
         mask_cls = F.softmax(mask_cls, dim=-1)[..., :-1]
         mask_pred = mask_pred.sigmoid()
+        N, H, W = mask_pred.shape
 
         regions = None
         if self.clip_ensemble:
-            clip_cls, regions, valid_flag = self.clip_adapter(
+            clip_cls, regions, valid_flag, image_features = self.clip_adapter(
                 image, class_names, mask_pred, normalize=True
             )
             if clip_cls is None:
@@ -449,6 +452,12 @@ class OVSegDEMO(MaskFormer):
                 # only clip model predictions are used
                 mask_cls = clip_cls
                 mask_pred = mask_pred[valid_flag]
+        C = image_features.shape[-1]
+        # mask_pred_argmax = torch.argmax(mask_pred, dim=0, keepdim=True)
+        mask_pred_argmax = torch.argmax(mask_pred, dim=0).unsqueeze(0)
+        mask_pred_argmax = mask_pred_argmax.expand(C, H, W)
+        print('mask_pred_argmax: ', mask_pred_argmax.shape)
+
         bin_mask = mask_pred > self.clip_adapter.mask_thr
         select_cls = torch.zeros(sum(valid_flag), mask_cls.shape[-1], device=self.device)
         select_mask = torch.argmax(mask_cls, dim=0)
@@ -457,4 +466,14 @@ class OVSegDEMO(MaskFormer):
         for idx in select_mask:
             select_cls[idx] = mask_cls[idx]
         semseg = torch.einsum("qc,qhw->chw", select_cls, bin_mask.float())
-        return semseg, regions
+
+        # image_features_new = torch.zeros(C, H, W)
+        # for i in range(H):
+        #     for j in range(W):
+        #         index = mask_pred_argmax[:, i, j]
+        #         image_features_new[:, i, j] = image_features[index]
+        image_features_new = image_features.unsqueeze(-1).unsqueeze(-1).expand(-1, C, H, W)  # shape: (N, C, H, W)
+        image_features_new = torch.gather(image_features_new, 0, mask_pred_argmax.unsqueeze(0))
+        image_features_new = image_features_new.squeeze(0)
+        print('image_features_new', image_features_new)
+        return semseg, regions, image_features_new

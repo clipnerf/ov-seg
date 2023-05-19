@@ -112,6 +112,7 @@ def load(
     mask_prompt_depth: int = 0,
     device: Union[str, torch.device] = "cuda" if torch.cuda.is_available() else "cpu",
     jit=False,
+    download_root: str = None
 ):
     """Load a CLIP model
 
