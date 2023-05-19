@@ -31,9 +31,12 @@ class OVSegPredictor(DefaultPredictor):
             height, width = original_image.shape[:2]
             image = self.aug.get_transform(original_image).apply_image(original_image)
             image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
+            print('image size: ', image.shape)
 
             inputs = {"image": image, "height": height, "width": width, "class_names": class_names}
-            predictions = self.model([inputs])[0]
+            # feature = self.model([inputs])
+            predictions, _ = self.model([inputs])
+            predictions = predictions[0]
             return predictions
 
 class OVSegVisualizer(Visualizer):
@@ -121,7 +124,7 @@ class VisualizationDemo(object):
             blank_area = (r[0] == 0)
             pred_mask = r.argmax(dim=0).to('cpu')
             pred_mask[blank_area] = 255
-            pred_mask = np.array(pred_mask, dtype=np.int)
+            pred_mask = np.array(pred_mask, dtype=np.int64)
 
             vis_output = visualizer.draw_sem_seg(
                 pred_mask
