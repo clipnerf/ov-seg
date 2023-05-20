@@ -153,8 +153,9 @@ class MaskFormerClipAdapter(ClipAdapter):
         return self.get_sim_logits(text_feature, image_features), unnorm_regions, valid_flag, image_features
 
     def get_image_features(self, image, region_masks=None):
-        import pdb
-        pdb.set_trace()
+        # import pdb
+        # pdb.set_trace()
+        print('region_masks', region_masks.shape)
         image_features = self.clip_model.visual(image, region_masks)
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         return image_features

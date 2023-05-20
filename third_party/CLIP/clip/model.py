@@ -322,8 +322,9 @@ class VisionTransformer(nn.Module):
 
         self.mask_pool = nn.AvgPool2d(patch_size, stride=patch_size)
         self.mask_prompt_depth = mask_prompt_depth
+        print('self.mask_prompt_depth', self.mask_prompt_depth)
         self.mask_embedding = nn.Parameter(torch.zeros(self.mask_prompt_depth, self.grid_size * self.grid_size, width))
-
+        print('self.mask_embedding', self.mask_embedding)
     def forward(self, x: torch.Tensor, m: torch.Tensor = None):
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
@@ -335,6 +336,9 @@ class VisionTransformer(nn.Module):
                 mask_embedding = self.mask_embedding.to(x.dtype).repeat(1, x.shape[1], 1)
             else:
                 mask_embedding = self.mask_embedding.to(x.dtype)
+            # print('self.mask_prompt_depth', self.mask_prompt_depth)
+            # print('mask_embedding', mask_embedding.shape)
+            # print('mask_embedding', mask_embedding)
             x = x * m + mask_embedding[0].unsqueeze(0) * (1 - m)
 
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
@@ -576,6 +580,13 @@ def build_model(state_dict: dict, mask_prompt_depth: int = 0):
             == state_dict["visual.attnpool.positional_embedding"].shape[0]
         )
         image_resolution = output_width * 32
+    
+    grid_size = image_resolution // vision_patch_size
+
+    # if 'visual.mask_embedding' not in state_dict:
+    #     print('visual.mask_embedding not in state_dict')
+    #     state_dict['visual.mask_embedding'] = nn.Parameter(torch.zeros(0, grid_size * grid_size, vision_width))
+
 
     embed_dim = state_dict["text_projection"].shape[1]
     context_length = state_dict["positional_embedding"].shape[0]

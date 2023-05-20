@@ -48,7 +48,7 @@ MODEL:
     MASK_EXPAND_RATIO: 1.0
     MASK_THR: 0.35 # choose the foreground objects
     MASK_MATTING: False # use soft background, default not used
-    MASK_PROMPT_DEPTH: 3
+    MASK_PROMPT_DEPTH: 5
     MASK_PROMPT_FWD: True # use mask prompt during forward
     REGION_RESIZED: True # resize to the input of clip, e.g., 224
     CLIP_ENSEMBLE: True # use ensemble of two classification branches

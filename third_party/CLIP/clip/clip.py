@@ -136,7 +136,7 @@ def load(
         A torchvision transform that converts a PIL image into a tensor that the returned model can take as its input
     """
     if name in _MODELS:
-        model_path = _download(_MODELS[name])
+        model_path = _download(_MODELS[name], download_root or os.path.expanduser("~/.cache/clip"))
     elif os.path.isfile(name):
         model_path = name
     else:
@@ -146,6 +146,7 @@ def load(
 
     try:
         # loading JIT archive
+        # print('load from here')
         model = torch.jit.load(model_path, map_location=device if jit else "cpu").eval()
         state_dict = None
     except RuntimeError:
@@ -156,6 +157,7 @@ def load(
             )
             jit = False
         state_dict = torch.load(model_path, map_location="cpu")
+        # print('state_dict', state_dict)
         if 'state_dict' in state_dict:
             new_state_dict = OrderedDict()
             for k, v in state_dict['state_dict'].items():
@@ -163,6 +165,9 @@ def load(
                     name = k[7:]  # remove `module.`
                     new_state_dict[name] = v
             state_dict = new_state_dict
+    print('jit: ', jit)
+    if 'visual.mask_embedding' not in model.state_dict():
+        print('visual.mask_embedding not in state_dict')
 
     if not jit:
         model = build_model(state_dict or model.state_dict(), mask_prompt_depth).to(device)

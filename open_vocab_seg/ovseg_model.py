@@ -457,8 +457,8 @@ class OVSegDEMO(MaskFormer):
         print('self.clip_ensemble_weight: ', self.clip_ensemble_weight)
         regions = None
         if self.clip_ensemble:
-            import pdb
-            pdb.set_trace()
+            # import pdb
+            # pdb.set_trace()
             clip_cls, regions, valid_flag, image_features = self.clip_adapter(
                 image, class_names, mask_pred, normalize=True
             )

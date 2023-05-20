@@ -70,8 +70,8 @@ def build_clip_model(model: str, mask_prompt_depth: int = 0, frozen: bool = True
     rank = get_local_rank()
     if rank == 0:
         # download on rank 0 only
-        # model, _ = clip.load(model, mask_prompt_depth=mask_prompt_depth, device="cpu")
-        model, _ = clip.load(model, device="cpu")
+        model, _ = clip.load(model, mask_prompt_depth=mask_prompt_depth, device="cpu")
+        # model, _ = clip.load(model, device="cpu")
     synchronize()
     if rank != 0:
         model, _ = clip.load(model, mask_prompt_depth=mask_prompt_depth, device="cpu")
